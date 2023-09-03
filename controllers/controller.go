@@ -66,6 +66,22 @@ func CreateActor(c *gin.Context) {
 	// Clear the cache since data has been modified
 	_ = RedisClient.Del("actors")
 
+	// Add the actor to Algolia index
+	_, err := AlgoliaIndex.AddObject(map[string]interface{}{
+		"ActorName":       actor.ActorName,
+		"ActorRating":     actor.ActorRating,
+		"ImagePath":       actor.ImagePath,
+		"AlternativeName": actor.AlternativeName,
+		"ActorID":         actor.ActorID,
+	})
+
+	if err != nil {
+		c.JSON(500, gin.H{
+			"error": "Failed to add actor to Algolia index",
+		})
+		return
+	}
+
 	c.JSON(200, gin.H{
 		"actor": actor,
 	})
