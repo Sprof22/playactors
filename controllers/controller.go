@@ -92,6 +92,19 @@ func GetActors(c *gin.Context) {
 	query := c.DefaultQuery("query", "")
 
 	if query != "" {
+		// Check if the search results are already cached in Redis
+		cachedResults, err := RedisClient.Get(query).Result()
+		if err == nil {
+			var actors []models.Actors
+			if err := json.Unmarshal([]byte(cachedResults), &actors); err == nil {
+				c.JSON(200, gin.H{
+					"message": "Search results fetched from Redis cache.",
+					"actors":  actors,
+				})
+				return
+			}
+		}
+
 		// Perform Algolia search using AlgoliaIndex
 		searchResponse, err := AlgoliaIndex.Search(query, algoliasearch.Map{})
 		if err != nil {
@@ -110,8 +123,14 @@ func GetActors(c *gin.Context) {
 			actors = append(actors, actor)
 		}
 
+		// Cache the search results in Redis for future use
+		if serializedData, err := json.Marshal(actors); err == nil {
+			_ = RedisClient.Set(query, serializedData, 24*time.Hour)
+		}
+
 		c.JSON(200, gin.H{
-			"actors": actors,
+			"message": "Search results fetched from Algolia and cached in Redis.",
+			"actors":  actors,
 		})
 	} else {
 		// Try to get actors from cache
@@ -120,7 +139,8 @@ func GetActors(c *gin.Context) {
 			var actors []models.Actors
 			if err := json.Unmarshal([]byte(cachedData), &actors); err == nil {
 				c.JSON(200, gin.H{
-					"actors": actors,
+					"message": "Actors list fetched from Redis cache.",
+					"actors":  actors,
 				})
 				return
 			}
@@ -135,7 +155,8 @@ func GetActors(c *gin.Context) {
 		}
 
 		c.JSON(200, gin.H{
-			"actors": actors,
+			"message": "Actors list fetched from database and cached in Redis.",
+			"actors":  actors,
 		})
 	}
 }
@@ -182,6 +203,7 @@ func UpdateActor(c *gin.Context) {
 
 	_ = RedisClient.Del("actors")
 	c.JSON(200, gin.H{
+
 		"actor": actor,
 	})
 }
